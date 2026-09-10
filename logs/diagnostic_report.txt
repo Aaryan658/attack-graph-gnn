@@ -1,0 +1,38 @@
+torch 2.13.0+cu126  |  scanning 3 sample(s)
+
+==============================================================================
+FILE: data\_data_\graph_00hliAZI.pt
+size: 9.41 MB
+------------------------------------------------------------------------------
+top-level type: builtins.dict
+------------------------------------------------------------------------------
+dict  (3 keys)  [builtins.dict]
+  'adj_tensor' = Tensor shape=(361, 361, 16) dtype=torch.float32 device=cpu min=0 max=1 mean=0.001447 unique=2 [0, 1]   --> adjacency tensor  (V=361, edge_types=16)
+  'X_matrix' = Tensor shape=(361, 19) dtype=torch.float32 device=cpu min=0 max=1 mean=0.09622 unique=2 [0, 1]   --> rectangular matrix -- likely node features (V=361, p=19)
+  'Y_matrix' = Tensor shape=(361, 361) dtype=torch.int64 device=cpu min=0 max=1 unique=2 [0, 1]   --> square matrix (V=361) -- likely attack-path target/label
+==============================================================================
+
+==============================================================================
+FILE: data\_data_\graph_036Idcma.pt
+size: 9.41 MB
+------------------------------------------------------------------------------
+top-level type: builtins.dict
+------------------------------------------------------------------------------
+dict  (3 keys)  [builtins.dict]
+  'adj_tensor' = Tensor shape=(361, 361, 16) dtype=torch.float32 device=cpu min=0 max=1 mean=0.001401 unique=2 [0, 1]   --> adjacency tensor  (V=361, edge_types=16)
+  'X_matrix' = Tensor shape=(361, 19) dtype=torch.float32 device=cpu min=0 max=1 mean=0.09754 unique=2 [0, 1]   --> rectangular matrix -- likely node features (V=361, p=19)
+  'Y_matrix' = Tensor shape=(361, 361) dtype=torch.int64 device=cpu min=0 max=1 unique=2 [0, 1]   --> square matrix (V=361) -- likely attack-path target/label
+==============================================================================
+
+==============================================================================
+FILE: data\_data_\graph_04rUpi8y.pt
+size: 9.41 MB
+------------------------------------------------------------------------------
+top-level type: builtins.dict
+------------------------------------------------------------------------------
+dict  (3 keys)  [builtins.dict]
+  'adj_tensor' = Tensor shape=(361, 361, 16) dtype=torch.float32 device=cpu min=0 max=1 mean=0.001481 unique=2 [0, 1]   --> adjacency tensor  (V=361, edge_types=16)
+  'X_matrix' = Tensor shape=(361, 19) dtype=torch.float32 device=cpu min=0 max=1 mean=0.09914 unique=2 [0, 1]   --> rectangular matrix -- likely node features (V=361, p=19)
+  'Y_matrix' = Tensor shape=(361, 361) dtype=torch.int64 device=cpu min=0 max=1 unique=2 [0, 1]   --> square matrix (V=361) -- likely attack-path target/label
+==============================================================================
+

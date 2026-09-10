@@ -1,0 +1,609 @@
+<title>Attack-Graph Algorithm Player</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+
+<style>
+/* ---- single dark "step-debugger console" world: every colour explicit,
+       no theme media query (deliberate -- this is an instrument panel) ---- */
+:root{
+  color-scheme: dark;
+  --ground:#0f1417; --panel:#161d21; --inset:#1d262b; --inset-2:#232f35;
+  --line:#2b383f; --line-bright:#3a4b53;
+  --ink:#dfe7e9; --ink-dim:#93a6ac; --ink-faint:#5f7278;
+  --signal:#4fd1c5; --signal-soft:#4fd1c520;
+  --accept:#6ee7a8; --reject:#f0776c; --frontier:#f2c14e; --path:#c58cf0;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r:7px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--ground);color:var(--ink);
+  font-family:var(--sans);font-size:14px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit;color:inherit}
+h1,h2,h3{margin:0;font-weight:600;text-wrap:balance}
+
+/* ---------- shell ---------- */
+.app{
+  display:grid;height:100%;
+  grid-template-rows:auto 1fr auto auto;
+  grid-template-columns:212px 1fr minmax(240px,320px);
+  grid-template-areas:
+    "head head head"
+    "rail stage panel"
+    "rail caption caption"
+    "rail transport transport";
+  gap:1px;background:var(--line);
+}
+.app > *{background:var(--ground)}
+header{
+  grid-area:head;display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;
+  padding:14px 20px;background:var(--panel);
+}
+header .title{font-size:16px;font-weight:700;letter-spacing:-0.01em}
+header .sub{color:var(--ink-dim);font-size:12.5px}
+header .spacer{flex:1}
+
+/* ---------- left rail: the five algorithms ---------- */
+.rail{grid-area:rail;background:var(--panel);padding:10px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+.rail .kicker{
+  font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);
+  padding:6px 8px 2px;
+}
+.algo-btn{
+  display:block;width:100%;text-align:left;cursor:pointer;
+  background:var(--inset);border:1px solid var(--line);border-radius:var(--r);
+  padding:9px 11px;transition:border-color .15s,background .15s;
+}
+.algo-btn:hover{border-color:var(--line-bright)}
+.algo-btn[aria-pressed="true"]{border-color:var(--signal);background:var(--signal-soft)}
+.algo-btn .n{font-weight:600;font-size:13.5px}
+.algo-btn .r{color:var(--ink-dim);font-size:11.5px;margin-top:1px}
+.algo-btn .c{color:var(--ink-faint);font-size:10.5px;font-family:var(--mono);margin-top:3px}
+
+/* ---------- stage ---------- */
+.stage{grid-area:stage;overflow:auto;padding:16px 18px;display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
+.stage .board{display:flex;flex-direction:column;gap:6px;min-width:0}
+.stage .board h3{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);font-weight:600}
+
+/* matrix */
+.matrix{display:grid;gap:2px;font-family:var(--mono);font-size:12px}
+.matrix .cell{
+  width:30px;height:30px;display:grid;place-items:center;border-radius:3px;
+  background:var(--inset);color:var(--ink-faint);
+  transition:background .28s,color .28s,transform .28s;
+}
+.matrix .cell.hdr{background:transparent;color:var(--ink-dim);font-weight:600}
+.matrix .cell.on{background:var(--inset-2);color:var(--ink)}
+.matrix .cell.kline{outline:1px solid var(--signal);outline-offset:-1px}
+.matrix .cell.flash{background:var(--signal);color:#06201d;transform:scale(1.12)}
+.matrix .cell.diag{color:var(--ink-faint)}
+.reduce .matrix .cell{transition:none}
+
+/* graph */
+svg.graph{display:block;background:var(--inset);border-radius:var(--r);width:100%;height:auto}
+svg.graph.big{cursor:grab}
+svg.graph .edge{stroke:var(--line-bright);stroke-width:1.4;fill:none}
+svg.graph .edge.dim{stroke:var(--line);opacity:.5}
+svg.graph .edge.relax{stroke:var(--signal);stroke-width:2.4}
+svg.graph .edge.tree{stroke:var(--accept);stroke-width:2.6}
+svg.graph .edge.reject{stroke:var(--reject);stroke-width:2;stroke-dasharray:4 3;opacity:.8}
+svg.graph .edge.fringe{stroke:var(--frontier);stroke-width:1.6;stroke-dasharray:3 3;opacity:.85}
+svg.graph .edge.path{stroke:var(--path);stroke-width:3.4}
+svg.graph .elabel{fill:var(--ink-dim);font-family:var(--mono);font-size:10px;paint-order:stroke;stroke:var(--inset);stroke-width:3px}
+svg.graph .node{stroke:var(--inset);stroke-width:2;fill:var(--inset-2);transition:fill .25s,stroke .25s,r .25s}
+svg.graph .node.dim{fill:#1a2429}
+svg.graph .node.settled{fill:var(--accept)}
+svg.graph .node.frontier{fill:var(--inset-2);stroke:var(--frontier);stroke-width:2.5}
+svg.graph .node.intree{fill:var(--accept)}
+svg.graph .node.cur{fill:var(--signal);stroke:var(--signal)}
+svg.graph .node.src{stroke:var(--path);stroke-width:2.5}
+svg.graph .node.tgt{stroke:var(--path);stroke-width:2.5;stroke-dasharray:3 2}
+svg.graph .nlabel{fill:var(--ink);font-family:var(--mono);font-size:11px;font-weight:500;pointer-events:none}
+.reduce svg.graph .node{transition:none}
+
+/* ---------- right panel: live data structure ---------- */
+.panel{grid-area:panel;background:var(--panel);padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
+.panel h3{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);font-weight:600;margin-bottom:6px}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{
+  font-family:var(--mono);font-size:11.5px;padding:3px 7px;border-radius:5px;
+  background:var(--inset);border:1px solid var(--line);color:var(--ink-dim);
+}
+.chip.q{border-color:var(--frontier);color:var(--frontier)}
+.chip.s{border-color:var(--accept);color:var(--accept)}
+.chip.r{border-color:var(--signal);color:var(--signal)}
+.rows{font-family:var(--mono);font-size:12px;display:flex;flex-direction:column;gap:2px;max-height:230px;overflow:auto}
+.rows .row{display:flex;justify-content:space-between;gap:8px;padding:3px 6px;border-radius:4px;background:var(--inset)}
+.rows .row.acc{color:var(--accept)}
+.rows .row.rej{color:var(--reject);opacity:.75}
+.rows .row.cur{outline:1px solid var(--signal)}
+.rows .row .w{color:var(--ink-faint)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-family:var(--mono);font-size:12px}
+.kv dt{color:var(--ink-faint)}
+.kv dd{margin:0;text-align:right}
+.legend{display:flex;flex-wrap:wrap;gap:8px 12px;font-size:11px;color:var(--ink-dim)}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+/* ---------- caption ---------- */
+.caption{
+  grid-area:caption;background:var(--panel);padding:12px 18px;
+  display:flex;gap:12px;align-items:baseline;
+}
+.caption .step-no{font-family:var(--mono);font-size:12px;color:var(--signal);white-space:nowrap}
+.caption .desc{font-size:13.5px;color:var(--ink)}
+.caption .desc b{color:var(--signal);font-weight:600}
+
+/* ---------- transport ---------- */
+.transport{
+  grid-area:transport;background:var(--panel);padding:10px 18px 14px;
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+}
+.transport button{
+  background:var(--inset);border:1px solid var(--line);border-radius:6px;
+  height:34px;min-width:38px;padding:0 10px;cursor:pointer;font-size:14px;
+  display:grid;place-items:center;transition:border-color .15s,background .15s;
+}
+.transport button:hover:not(:disabled){border-color:var(--line-bright)}
+.transport button.primary{border-color:var(--signal);color:var(--signal);min-width:82px;gap:6px;display:flex;align-items:center}
+.transport button:disabled{opacity:.4;cursor:not-allowed}
+.transport input[type=range]{flex:1;min-width:160px;accent-color:var(--signal)}
+.transport .count{font-family:var(--mono);font-size:12px;color:var(--ink-dim);white-space:nowrap;min-width:74px;text-align:right}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{border:0;border-radius:0;height:32px;min-width:52px;color:var(--ink-dim)}
+.seg button[aria-pressed="true"]{background:var(--signal-soft);color:var(--signal)}
+.transport label.speed{display:flex;align-items:center;gap:6px;color:var(--ink-faint);font-size:11px}
+.transport select{background:var(--inset);border:1px solid var(--line);color:var(--ink);border-radius:6px;height:32px;padding:0 6px;font-family:var(--mono);font-size:12px}
+
+:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+@media (max-width:900px){
+  .app{grid-template-columns:1fr;grid-template-areas:"head" "rail" "stage" "panel" "caption" "transport";grid-template-rows:auto auto auto auto auto auto}
+  .rail{flex-direction:row;flex-wrap:wrap}
+  .algo-btn{width:auto;flex:1 1 150px}
+}
+</style>
+
+<div class="app">
+  <header>
+    <span class="title">Attack-Graph Algorithm Player</span>
+    <span class="sub">Five classical algorithms, stepped through &mdash; on a GNN-weighted Active&nbsp;Directory attack graph</span>
+    <span class="spacer"></span>
+    <div class="seg" id="mode-seg" role="group" aria-label="graph size">
+      <button data-mode="toy" aria-pressed="true">toy</button>
+      <button data-mode="real" aria-pressed="false">real&nbsp;&middot;&nbsp;361</button>
+    </div>
+  </header>
+
+  <nav class="rail" id="rail">
+    <div class="kicker">algorithm</div>
+  </nav>
+
+  <section class="stage" id="stage"></section>
+
+  <aside class="panel" id="panel"></aside>
+
+  <div class="caption">
+    <span class="step-no" id="step-no">step 0</span>
+    <span class="desc" id="desc"></span>
+  </div>
+
+  <div class="transport">
+    <button id="btn-first" title="first (Home)">&#x23EE;</button>
+    <button id="btn-prev" title="previous (left arrow)">&#x25C0;</button>
+    <button id="btn-play" class="primary" title="play / pause (Space)"><span id="play-ico">&#x25B6;</span><span id="play-txt">Play</span></button>
+    <button id="btn-next" title="next (right arrow)">&#x25B6;</button>
+    <button id="btn-last" title="last (End)">&#x23ED;</button>
+    <input type="range" id="scrub" min="0" max="0" value="0" aria-label="step">
+    <span class="count" id="count">0 / 0</span>
+    <label class="speed">speed
+      <select id="speed"><option value="1600">0.6&times;</option><option value="1000" selected>1&times;</option><option value="550">1.8&times;</option><option value="260">3.8&times;</option></select>
+    </label>
+  </div>
+</div>
+
+<script id="trace-data" type="application/json">__DATA__</script>
+
+<script>
+"use strict";
+const DATA = JSON.parse(document.getElementById("trace-data").textContent);
+if (matchMedia("(prefers-reduced-motion: reduce)").matches) document.body.classList.add("reduce");
+
+/* ---------------- algorithm registry ---------------- */
+const ALGOS = [
+  {key:"warshall",       name:"Warshall",       role:"transitive closure -> reachability", cx:"O(V^3)", real:false, kind:"matrix"},
+  {key:"floyd_warshall", name:"Floyd-Warshall", role:"all-pairs shortest cost",            cx:"O(V^3)", real:false, kind:"matrix"},
+  {key:"dijkstra",       name:"Dijkstra",       role:"one source -> one target path",      cx:"O((V+E) log V)", real:true, kind:"graph"},
+  {key:"kruskal",        name:"Kruskal",        role:"MST via Union-Find",                 cx:"O(E log E)", real:false, kind:"graph"},
+  {key:"prim",           name:"Prim",           role:"MST via min-heap",                   cx:"O(E log V)", real:true, kind:"graph"},
+];
+const EDGE_LABELS_MAX = 24;
+
+/* ---------------- state ---------------- */
+const S = {algo:"warshall", mode:"toy", step:0, playing:false, speed:1000, timer:null};
+
+/* ---------------- build left rail ---------------- */
+const rail = document.getElementById("rail");
+ALGOS.forEach(a=>{
+  const b=document.createElement("button");
+  b.className="algo-btn"; b.dataset.key=a.key; b.setAttribute("aria-pressed", a.key===S.algo);
+  b.innerHTML=`<div class="n">${a.name}</div><div class="r">${a.role}</div><div class="c">${a.cx}</div>`;
+  b.onclick=()=>selectAlgo(a.key);
+  rail.appendChild(b);
+});
+
+/* ---------------- helpers ---------------- */
+const cfg = ()=>ALGOS.find(a=>a.key===S.algo);
+function currentTrace(){
+  if(S.mode==="real"){
+    const r=DATA.real; if(!r||!r[S.algo]) return null;
+    return {steps:r[S.algo].steps, graph:r.graph, meta:r.graph.meta, result:r[S.algo].result, real:true};
+  }
+  const t=DATA.toy[S.algo];
+  return {steps:t.steps, graph:t.graph, result:t.result, real:false, source:t.source, target:t.target, start:t.start};
+}
+function stepCount(){ const t=currentTrace(); return t?t.steps.length:0; }
+
+/* ---------------- graph geometry ---------------- */
+function makeScales(layout, W, H, pad){
+  const xs=layout.map(p=>p[0]), ys=layout.map(p=>p[1]);
+  const sx=d3.scaleLinear().domain([Math.min(...xs),Math.max(...xs)]).range([pad,W-pad]);
+  const sy=d3.scaleLinear().domain([Math.min(...ys),Math.max(...ys)]).range([H-pad,pad]);
+  return {sx,sy};
+}
+
+function drawGraph(svg, graph){
+  const big = graph.nodes.length>40;
+  const W = big?720:420, H = big?520:360, pad = big?26:40;
+  svg.attr("viewBox",`0 0 ${W} ${H}`).classed("big",big).selectAll("*").remove();
+
+  const {sx,sy}=makeScales(graph.layout,W,H,pad);
+  const P=graph.layout.map(p=>[sx(p[0]),sy(p[1])]);
+
+  const defs=svg.append("defs");
+  defs.append("marker").attr("id","arw").attr("viewBox","0 0 10 10")
+    .attr("refX", big?8:16).attr("refY",5).attr("markerWidth",6).attr("markerHeight",6).attr("orient","auto-start-reverse")
+    .append("path").attr("d","M0,0 L10,5 L0,10 z").attr("fill","var(--line-bright)");
+
+  const zoomG=svg.append("g").attr("class","zoom");
+  const staticE=zoomG.append("g");
+  const dynE=zoomG.append("g");
+  const nodeG=zoomG.append("g");
+  const labG=zoomG.append("g");
+
+  function edgePath(u,v){
+    const a=P[u], b=P[v];
+    if(!a||!b) return "";
+    if(!graph.directed || big) return `M${a[0]},${a[1]} L${b[0]},${b[1]}`;
+    const mx=(a[0]+b[0])/2, my=(a[1]+b[1])/2, dx=b[0]-a[0], dy=b[1]-a[1];
+    const nx=-dy, ny=dx, L=Math.hypot(nx,ny)||1, k=14;
+    return `M${a[0]},${a[1]} Q${mx+nx/L*k},${my+ny/L*k} ${b[0]},${b[1]}`;
+  }
+
+  if(big){
+    staticE.selectAll("path").data(graph.edges).enter().append("path")
+      .attr("class","edge dim").attr("d",d=>edgePath(d[0],d[1])).attr("opacity",0.10);
+  } else {
+    staticE.selectAll("path").data(graph.edges).enter().append("path")
+      .attr("class","edge").attr("d",d=>edgePath(d[0],d[1]))
+      .attr("marker-end",graph.directed?"url(#arw)":null);
+    if(graph.edges.length<=EDGE_LABELS_MAX && graph.edges[0].length>2){
+      labG.selectAll("text.el").data(graph.edges).enter().append("text")
+        .attr("class","elabel").attr("text-anchor","middle")
+        .attr("x",d=>(P[d[0]][0]+P[d[1]][0])/2).attr("y",d=>(P[d[0]][1]+P[d[1]][1])/2-3)
+        .text(d=>d[2]);
+    }
+  }
+
+  const R = big?4:15;
+  const nodes=nodeG.selectAll("circle").data(graph.nodes).enter().append("circle")
+    .attr("class","node").attr("cx",(d,i)=>P[i][0]).attr("cy",(d,i)=>P[i][1]).attr("r",R);
+  if(!big){
+    labG.selectAll("text.nl").data(graph.nodes).enter().append("text")
+      .attr("class","nlabel").attr("text-anchor","middle").attr("dominant-baseline","central")
+      .attr("x",(d,i)=>P[i][0]).attr("y",(d,i)=>P[i][1]).text(d=>d.label);
+  }
+
+  if(big){
+    svg.call(d3.zoom().scaleExtent([0.6,6]).on("zoom",ev=>zoomG.attr("transform",ev.transform)));
+  }
+
+  function paintEdges(list){
+    const sel=dynE.selectAll("path").data(list,d=>d.u+"_"+d.v+"_"+d.cls);
+    sel.exit().remove();
+    sel.enter().append("path")
+      .merge(sel)
+      .attr("class",d=>"edge "+d.cls)
+      .attr("d",d=>edgePath(d.u,d.v)||edgePath(d.v,d.u))
+      .attr("marker-end",graph.directed && !big ? "url(#arw)" : null);
+  }
+  function paintNodes(clsOf){
+    nodes.attr("class",(d,i)=>"node "+(clsOf(i,d)||""))
+         .attr("r",(d,i)=>{const c=clsOf(i,d)||"";return c.includes("cur")?R*(big?1.9:1.18):R;});
+  }
+  return {paintEdges,paintNodes,nodes,R,big};
+}
+
+/* ---------------- matrix view ---------------- */
+function drawMatrix(host, labels, kActive){
+  const n=labels.length;
+  host.style.gridTemplateColumns=`repeat(${n+1}, 30px)`;
+  host.innerHTML="";
+  const mk=(txt,cls)=>{const d=document.createElement("div");d.className="cell "+(cls||"");d.textContent=txt;return d;};
+  host.appendChild(mk("","hdr"));
+  labels.forEach((l,j)=>host.appendChild(mk(l,"hdr"+(j===kActive?" kline":""))));
+  for(let i=0;i<n;i++){
+    host.appendChild(mk(labels[i],"hdr"+(i===kActive?" kline":"")));
+    for(let j=0;j<n;j++){
+      const c=mk("", (i===j?"diag ":"")+((i===kActive||j===kActive)?"kline ":""));
+      c.dataset.i=i; c.dataset.j=j;
+      host.appendChild(c);
+    }
+  }
+}
+function cellAt(host,i,j){ return host.querySelector(`.cell[data-i="${i}"][data-j="${j}"]`); }
+
+/* ---------------- stage / panel scaffolding ---------------- */
+let G=null, MATRIX_HOST=null;
+function buildStage(){
+  const stage=document.getElementById("stage");
+  const panel=document.getElementById("panel");
+  stage.innerHTML=""; panel.innerHTML=""; G=null; MATRIX_HOST=null;
+  const t=currentTrace(); const a=cfg();
+  if(!t){ stage.innerHTML=`<p class="sub">No real-graph trace for ${a.name}.</p>`; return; }
+
+  if(a.kind==="matrix" && S.mode==="toy"){
+    const b1=document.createElement("div"); b1.className="board";
+    b1.innerHTML=`<h3>${a.key==="warshall"?"reachability matrix":"distance matrix"}</h3>`;
+    const m=document.createElement("div"); m.className="matrix"; b1.appendChild(m);
+    stage.appendChild(b1); MATRIX_HOST=m;
+    const b2=document.createElement("div"); b2.className="board";
+    b2.innerHTML="<h3>graph</h3>";
+    G=drawGraph(d3.select(b2).append("svg").attr("class","graph"), t.graph);
+    stage.appendChild(b2);
+  } else {
+    const b=document.createElement("div"); b.className="board"; b.style.flex="1";
+    b.innerHTML=`<h3>graph${t.real?` &mdash; ${t.meta.V} nodes, ${t.meta.num_edges} edges &nbsp;(drag to pan, scroll to zoom)`:""}</h3>`;
+    G=drawGraph(d3.select(b).append("svg").attr("class","graph"), t.graph);
+    stage.appendChild(b);
+  }
+  panel.innerHTML = panelTemplate(a.key, t);
+}
+
+function panelTemplate(key,t){
+  const legend = {
+    warshall:`<span><i style="background:var(--signal)"></i>current k</span><span><i style="background:var(--inset-2);border:1px solid var(--line)"></i>reachable</span>`,
+    floyd_warshall:`<span><i style="background:var(--signal)"></i>current k</span><span><i style="background:var(--inset-2);border:1px solid var(--line)"></i>finite cost</span>`,
+    dijkstra:`<span><i style="background:var(--signal)"></i>popping</span><span><i style="background:var(--accept)"></i>settled</span><span><i style="border:2px solid var(--frontier)"></i>in queue</span><span><i style="background:var(--path)"></i>path</span>`,
+    kruskal:`<span><i style="background:var(--signal)"></i>considering</span><span><i style="background:var(--accept)"></i>accepted</span><span><i style="background:var(--reject)"></i>rejected</span>`,
+    prim:`<span><i style="background:var(--signal)"></i>crossing edge</span><span><i style="background:var(--accept)"></i>in tree</span><span><i style="border:2px solid var(--frontier)"></i>fringe</span>`,
+  }[key];
+  let body="";
+  if(key==="dijkstra") body=`<div><h3>priority queue</h3><div class="chips" id="pq"></div></div>
+      <div><h3>settled</h3><div class="chips" id="settled"></div></div>
+      <div><h3>relaxed this step</h3><div class="chips" id="relax"></div></div>`;
+  else if(key==="kruskal") body=`<div><h3>edges, sorted by weight</h3><div class="rows" id="rows"></div></div>
+      <div><h3>disjoint-set components</h3><div class="chips" id="forest"></div></div>`;
+  else if(key==="prim") body=`<div><h3>tree edges</h3><div class="rows" id="rows"></div></div><dl class="kv" id="kv"></dl>`;
+  else body=`<div><h3>changed this step</h3><div class="chips" id="changed"></div></div><dl class="kv" id="kv"></dl>`;
+  return `<div class="legend">${legend}</div>${body}`;
+}
+
+/* ---------------- per-step render ---------------- */
+function render(){
+  const t=currentTrace();
+  const scr=document.getElementById("scrub");
+  document.querySelectorAll(".algo-btn").forEach(b=>b.setAttribute("aria-pressed",b.dataset.key===S.algo));
+  document.querySelectorAll("#mode-seg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.mode===S.mode));
+  if(!t){ document.getElementById("desc").textContent=""; document.getElementById("count").textContent="0 / 0"; return; }
+  const steps=t.steps, i=Math.max(0,Math.min(S.step,steps.length-1));
+  S.step=i; const st=steps[i];
+  document.getElementById("step-no").textContent="step "+i;
+  document.getElementById("desc").innerHTML=(st.desc||"").replace(/\b(ACCEPT|REJECT)\b/g,"<b>$1</b>");
+  scr.max=steps.length-1; scr.value=i;
+  document.getElementById("count").textContent=`${i} / ${steps.length-1}`;
+  ({warshall:renderWarshall,floyd_warshall:renderFloyd,dijkstra:renderDijkstra,
+    kruskal:renderKruskal,prim:renderPrim}[S.algo])(t,st,i);
+}
+
+/* ---- Warshall ---- */
+function renderWarshall(t,st){
+  const labels=t.graph.nodes.map(n=>n.label);
+  drawMatrix(MATRIX_HOST,labels, st.k);
+  const M=st.matrix;
+  for(let i=0;i<labels.length;i++)for(let j=0;j<labels.length;j++){
+    const c=cellAt(MATRIX_HOST,i,j); if(!c)continue;
+    if(M[i][j]){c.classList.add("on");c.textContent="1";} else {c.textContent="";}
+  }
+  (st.changed||[]).forEach(([i,j])=>{const c=cellAt(MATRIX_HOST,i,j);if(c)c.classList.add("flash");});
+  G.paintNodes(idx=> idx===st.k ? "cur" : "");
+  G.paintEdges((st.changed||[]).map(([u,v])=>({u,v,cls:"relax"})));
+  document.getElementById("changed").innerHTML=(st.changed||[]).map(([i,j])=>`<span class="chip r">${labels[i]}&rarr;${labels[j]}</span>`).join("")||`<span class="chip">&mdash;</span>`;
+  const reach=[]; M[0].forEach((v,j)=>{if(v&&j!==0)reach.push(labels[j]);});
+  document.getElementById("kv").innerHTML=`<dt>reach from ${labels[0]}</dt><dd>${reach.join(" ")||"—"}</dd><dt>reachable pairs</dt><dd>${M.flat().filter(Boolean).length}</dd>`;
+}
+
+/* ---- Floyd-Warshall ---- */
+function renderFloyd(t,st){
+  const labels=t.graph.nodes.map(n=>n.label);
+  drawMatrix(MATRIX_HOST,labels, st.k);
+  const D=st.dist;
+  for(let i=0;i<labels.length;i++)for(let j=0;j<labels.length;j++){
+    const c=cellAt(MATRIX_HOST,i,j); if(!c)continue;
+    const v=D[i][j];
+    if(v===null||v===undefined){c.textContent="∞";}
+    else {c.classList.add("on");c.textContent=Number.isInteger(v)?v:(+v).toFixed(1);}
+  }
+  (st.improved||[]).forEach(([i,j])=>{const c=cellAt(MATRIX_HOST,i,j);if(c)c.classList.add("flash");});
+  G.paintNodes(idx=> idx===st.k ? "cur" : "");
+  G.paintEdges((st.improved||[]).map(([u,v])=>({u,v,cls:"relax"})));
+  document.getElementById("changed").innerHTML=(st.improved||[]).map(([i,j])=>`<span class="chip r">${i}&rarr;${j}</span>`).join("")||`<span class="chip">&mdash;</span>`;
+  const row0=D[0].map((v,j)=> v==null?`${j}:∞`:`${j}:${(+v).toFixed(1)}`).join("  ");
+  document.getElementById("kv").innerHTML=`<dt>dist[0][&middot;]</dt><dd>${row0}</dd>`;
+}
+
+/* ---- Dijkstra ---- */
+function renderDijkstra(t,st,i){
+  const isLast = i===t.steps.length-1;
+  const src = t.real? t.meta.source : t.source;
+  const tgt = t.real? t.meta.target : t.target;
+  let settled;
+  if(t.real){ settled=new Set(); for(let k=1;k<=i;k++){const s=t.steps[k]; if(s.settled_new!=null)settled.add(s.settled_new);} }
+  else { settled=new Set(st.settled||[]); }
+  const cur = st.vertex;
+  const frontierIds = t.real ? new Set((st.frontier_head||[]).map(f=>f[0]))
+                             : new Set((st.frontier||[]).map(f=>f[0]));
+  G.paintNodes((idx)=>{
+    let c=[];
+    if(idx===src)c.push("src"); if(idx===tgt)c.push("tgt");
+    if(idx===cur && st.kind!=="init")c.push("cur");
+    else if(settled.has(idx))c.push("settled");
+    else if(frontierIds.has(idx))c.push("frontier");
+    else if(t.real)c.push("dim");
+    return c.join(" ");
+  });
+  // On the final step, settling the target can relax a large fan of its
+  // out-edges -- that would bury the solution. Show only the path instead.
+  const relax = isLast ? [] : (st.relax||[]).map(([u,v])=>({u,v,cls:"relax"}));
+  let pathEdges=[];
+  const path = t.real? t.result.path : t.result.path_0_to_4;
+  if(isLast && path && path.length>1){
+    for(let k=0;k<path.length-1;k++)pathEdges.push({u:path[k],v:path[k+1],cls:"path"});
+  }
+  G.paintEdges(relax.concat(pathEdges));
+
+  const pq=document.getElementById("pq"), se=document.getElementById("settled"), rx=document.getElementById("relax");
+  const front = t.real ? (st.frontier_head||[]) : (st.frontier||[]);
+  const dp = t.real?4:1;
+  pq.innerHTML = (front.map(([v,d])=>`<span class="chip q">${v}:${(+d).toFixed(dp)}</span>`).join("")
+     + (t.real && st.frontier_size>front.length ? `<span class="chip">+${st.frontier_size-front.length} more</span>`:""))
+     || `<span class="chip">empty</span>`;
+  se.innerHTML=[...settled].slice(-40).map(v=>`<span class="chip s">${v}</span>`).join("")||`<span class="chip">&mdash;</span>`;
+  rx.innerHTML=(st.relax||[]).map(([u,v,d])=>`<span class="chip r">${u}&rarr;${v} = ${(+d).toFixed(dp)}</span>`).join("")||`<span class="chip">&mdash;</span>`;
+}
+
+/* ---- Kruskal ---- */
+function renderKruskal(t,st,i){
+  const roots=[...new Set(st.forest)];
+  const col=d3.scaleOrdinal().domain(roots).range(d3.schemeTableau10.concat(d3.schemeSet3));
+  G.paintNodes(()=>"");
+  G.nodes.attr("fill",(d,idx)=>st.forest.length? col(st.forest[idx]) : null);
+
+  const es=[];
+  (st.mst||[]).forEach(([u,v])=>es.push({u,v,cls:"tree"}));
+  if(st.edge){
+    const acc = st.decision && st.decision.startsWith("accept");
+    es.push({u:st.edge[0],v:st.edge[1],cls: acc?"relax":"reject"});
+  }
+  G.paintEdges(es);
+
+  const rows=document.getElementById("rows"); rows.innerHTML="";
+  for(let k=1;k<t.steps.length;k++){
+    const s=t.steps[k]; if(!s.edge)continue;
+    const acc=s.decision&&s.decision.startsWith("accept");
+    const done=k<=i;
+    const div=document.createElement("div");
+    div.className="row "+(done?(acc?"acc":"rej"):"")+(k===i?" cur":"");
+    div.innerHTML=`<span>${s.edge[0]}&ndash;${s.edge[1]}</span><span class="w">${s.weight}</span><span>${done?(acc?"✓":"✗"):"·"}</span>`;
+    rows.appendChild(div);
+  }
+  const groups={}; st.forest.forEach((r,idx)=>{(groups[r]=groups[r]||[]).push(idx);});
+  document.getElementById("forest").innerHTML=Object.entries(groups)
+    .map(([r,g])=>`<span class="chip" style="border-color:${col(+r)};color:${col(+r)}">{${g.join(",")}}</span>`).join("");
+}
+
+/* ---- Prim ---- */
+function renderPrim(t,st,i){
+  const inTree = t.real
+    ? (()=>{const s=new Set();for(let k=0;k<=i;k++){const x=t.steps[k];if(x.via){s.add(x.via[0]);s.add(x.via[1]);}else if(x.vertex!=null)s.add(x.vertex);}return s;})()
+    : new Set(st.in_tree||[]);
+  const start = t.real? undefined : t.start;
+  const cur = st.via;
+  G.paintNodes(idx=>{
+    if(idx===start && st.kind==="add" && !st.via) return "cur";
+    return inTree.has(idx)?"intree":(t.real?"dim":"");
+  });
+
+  let tree=[];
+  if(t.real){ for(let k=0;k<=i;k++){const x=t.steps[k]; if(x.via)tree.push({u:x.via[0],v:x.via[1],cls:"tree"});} }
+  else { (st.mst||[]).forEach(([u,v])=>tree.push({u,v,cls:"tree"})); }
+  const es=tree.slice();
+  if(cur) es.push({u:cur[0],v:cur[1],cls:"relax"});
+  if(!t.real){
+    t.graph.edges.forEach(([u,v])=>{
+      const a=inTree.has(u), b=inTree.has(v);
+      if(a!==b && !(cur && ((cur[0]===u&&cur[1]===v)||(cur[0]===v&&cur[1]===u)))) es.push({u,v,cls:"fringe"});
+    });
+  }
+  G.paintEdges(es);
+
+  if(t.real){
+    let h="";for(let k=Math.max(1,i-14);k<=i;k++){const x=t.steps[k];if(!x.via)continue;
+      h+=`<div class="row acc"><span>${x.via[0]}&ndash;${x.via[1]}</span><span class="w">${(+x.weight).toFixed(4)}</span></div>`;}
+    document.getElementById("rows").innerHTML=h||`<div class="row">&mdash;</div>`;
+    document.getElementById("kv").innerHTML=
+      `<dt>edges in tree</dt><dd>${st.edges_in_tree||0} / ${t.result.mst_edges}</dd>`+
+      `<dt>running weight</dt><dd>${(+(st.running||0)).toFixed(3)}</dd>`+
+      `<dt>heap size</dt><dd>${st.fringe_size||0}</dd>`;
+  } else {
+    document.getElementById("rows").innerHTML=(st.mst||[]).map(([u,v,w])=>`<div class="row acc"><span>${u}&ndash;${v}</span><span class="w">${w}</span></div>`).join("")||`<div class="row">&mdash;</div>`;
+    document.getElementById("kv").innerHTML=`<dt>edges in tree</dt><dd>${(st.mst||[]).length} / ${t.graph.nodes.length-1}</dd><dt>running weight</dt><dd>${(+(st.running||0)).toFixed(1)}</dd><dt>heap size</dt><dd>${st.fringe_size||0}</dd>`;
+  }
+}
+
+/* ---------------- controls ---------------- */
+function selectAlgo(key){ stop(); S.algo=key; S.step=0;
+  const a=ALGOS.find(x=>x.key===key);
+  if(S.mode==="real" && !a.real) S.mode="toy";
+  refreshModeSeg(); buildStage(); render();
+}
+function setMode(m){ const a=cfg(); if(m==="real" && !a.real) return; stop(); S.mode=m; S.step=0; buildStage(); render(); }
+function refreshModeSeg(){
+  const a=cfg();
+  document.querySelectorAll("#mode-seg button").forEach(b=>{
+    const real=b.dataset.mode==="real";
+    b.disabled = real && !a.real;
+    b.title = real && !a.real ? "no real-graph trace for this algorithm" : "";
+  });
+}
+function goto(i){ const n=stepCount(); S.step=Math.max(0,Math.min(i,n-1)); render();
+  if(S.playing && S.step>=n-1) stop(); }
+function stepBy(d){ goto(S.step+d); }
+function play(){ if(S.playing)return stop(); const n=stepCount();
+  if(S.step>=n-1)S.step=0;
+  S.playing=true; setPlayIco();
+  S.timer=setInterval(()=>stepBy(1), S.speed);
+}
+function stop(){ S.playing=false; if(S.timer)clearInterval(S.timer); S.timer=null; setPlayIco(); }
+function setPlayIco(){
+  document.getElementById("play-ico").innerHTML=S.playing?"&#x23F8;":"&#x25B6;";
+  document.getElementById("play-txt").textContent=S.playing?"Pause":"Play";
+}
+document.getElementById("btn-first").onclick=()=>{stop();goto(0);};
+document.getElementById("btn-prev").onclick=()=>{stop();stepBy(-1);};
+document.getElementById("btn-next").onclick=()=>{stop();stepBy(1);};
+document.getElementById("btn-last").onclick=()=>{stop();goto(stepCount()-1);};
+document.getElementById("btn-play").onclick=play;
+document.getElementById("scrub").oninput=e=>{stop();goto(+e.target.value);};
+document.getElementById("speed").onchange=e=>{S.speed=+e.target.value; if(S.playing){stop();play();}};
+document.querySelectorAll("#mode-seg button").forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
+addEventListener("keydown",e=>{
+  if(e.target.tagName==="SELECT"||e.target.tagName==="INPUT")return;
+  if(e.key==="ArrowRight"){stop();stepBy(1);}
+  else if(e.key==="ArrowLeft"){stop();stepBy(-1);}
+  else if(e.key===" "){e.preventDefault();play();}
+  else if(e.key==="Home"){stop();goto(0);}
+  else if(e.key==="End"){stop();goto(stepCount()-1);}
+});
+
+/* ---------------- go ---------------- */
+refreshModeSeg();
+buildStage();
+render();
+</script>

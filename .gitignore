@@ -1,0 +1,29 @@
+# --- Large / regenerable data ---
+# data/     : 1033 extracted .pt samples (~9 GB) -- unzip _data_.zip
+# external/ : cloned PhD_Replication_Package (~670 MB, reproducible)
+# checkpoints/ : trained weights -- retrain with `python -m src.train`
+data/
+external/
+checkpoints/
+
+# --- Run artifacts (regenerable) ---
+# per-run algorithm traces; animation_data.json is rebuilt by src.export_traces
+logs/explain/
+logs/animation_data.json
+
+# Kept in the repo (small, useful for the write-up):
+#   logs/training_log.csv, logs/training_curve.png, logs/diagnostic_report.txt
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.ipynb_checkpoints/
+
+# --- Tooling / editor / OS ---
+.claude/logs/
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

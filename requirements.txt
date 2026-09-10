@@ -1,0 +1,32 @@
+# =============================================================================
+# attack-graph-gnn -- Python dependencies
+# =============================================================================
+# This machine already had a working CUDA PyTorch build for the RTX 4060, so
+# the versions below are PINNED TO WHAT IS INSTALLED AND VERIFIED WORKING, not
+# to the cu121 line originally sketched in the project brief.
+#
+#   Python  : 3.14  (C:\Python314\python.exe)
+#   GPU     : NVIDIA GeForce RTX 4060 Laptop GPU
+#   CUDA    : 12.6  (torch.version.cuda == '12.6')
+#   verified: torch.cuda.is_available() == True
+#
+# ---- Installing torch with CUDA ---------------------------------------------
+# The plain `pip install torch` on PyPI is CPU-only on some platforms. Install
+# the CUDA wheel explicitly from the PyTorch index, then the rest normally:
+#
+#   pip install --index-url https://download.pytorch.org/whl/cu126 torch
+#   pip install -r requirements.txt
+#
+# If you are recreating this environment on a machine with a different CUDA
+# runtime, swap `cu126` for your version (cu121, cu124, ...) and update the
+# torch pin below to the matching build.
+# =============================================================================
+
+torch==2.13.0+cu126            # deep-learning core; MUST be the +cuXXX CUDA build
+torch_geometric==2.8.0.post1   # GraphSAGE layers, Data containers, mini-batching
+
+networkx==3.*                  # ONLY for graph construction / IO / drawing --
+                               # never for the 5 classical algorithms (those are
+                               # hand-implemented in src/algorithms/)
+pandas==2.*                    # per-epoch training log -> CSV for the report chart
+matplotlib==3.*                # training-curve figure
