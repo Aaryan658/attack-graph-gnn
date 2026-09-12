@@ -1,0 +1,26 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # CPU-only torch -- the algorithm/loader/model tests need no GPU.
+      # Training and the full pipeline still require CUDA locally; see README.
+      - name: Install dependencies (CPU)
+        run: |
+          pip install --index-url https://download.pytorch.org/whl/cpu torch
+          pip install torch_geometric networkx pandas matplotlib
+          pip install -r requirements-dev.txt
+
+      - name: Run test suite
+        run: pytest tests/ -v

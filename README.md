@@ -1,5 +1,7 @@
 # Attack-Graph GNN + Classical Graph Algorithms
 
+[![tests](https://github.com/Aaryan658/attack-graph-gnn/actions/workflows/tests.yml/badge.svg)](https://github.com/Aaryan658/attack-graph-gnn/actions/workflows/tests.yml)
+
 A research-style pipeline that combines a **Graph Neural Network** with **five
 from-scratch classical graph algorithms** to analyse Active Directory (AD)
 **attack graphs**.
@@ -140,7 +142,100 @@ with accept/reject; Prim's tree growth). `src/explain/logger.py` writes per run:
 
 ---
 
-## 6. Setup & run
+## 6. Does the GNN actually help? (evaluation & ablation)
+
+`src/evaluate.py` compares the trained GNN against two **non-learned**
+baselines on the untouched test split (207 graphs):
+
+* `uniform` -- every edge scored 0.5 (the "no model at all" floor).
+* `heuristic` -- a fixed AD-security-analyst severity per edge type (DCSync /
+  GenericAll / WriteDacl highest, GpLink / Contains lowest; the 16-channel
+  order was recovered from the upstream `_graphPreprocess_.ipynb`, not
+  guessed). This is domain expertise, not a second model.
+
+**Pooled edge-ranking metrics, all 207 test graphs (~600k edges, 0.17% positive):**
+
+| scheme | ROC-AUC | Average Precision | P@10 | P@50 |
+|---|---|---|---|---|
+| uniform | 0.500 | 0.001 | 0.000 | 0.000 |
+| heuristic | 0.333 | 0.001 | 0.000 | 0.000 |
+| **gnn** | **0.993** | **0.316** | **1.000** | **0.700** |
+
+The heuristic baseline scoring *below* random (0.333) is a real, non-cherry-
+picked finding: the sampled attack paths in this dataset don't preferentially
+use "high-severity" edge types, so an expert rule alone actively misleads.
+The GNN is not just better than nothing -- it is the only scheme that beats
+chance at all.
+
+**Path-quality ablation** (Dijkstra from the true attack-path start to its
+end, Jaccard overlap between the predicted path's edges and the true path,
+averaged over 50 sampled test graphs):
+
+| scheme | mean Jaccard vs. true path |
+|---|---|
+| uniform | 0.580 |
+| heuristic | 0.564 |
+| **gnn** | **0.638** |
+
+**Multi-graph algorithm cross-check** (30 sampled test graphs, GNN weights):
+Dijkstra's cost equalled Floyd-Warshall's, and Kruskal's MST total equalled
+Prim's, on **100%** of sampled graphs -- the single-graph agreement shown by
+`main.py` holds up at scale, not just on one lucky example.
+
+**Threshold sweep** (Warshall's reachable-set size vs. propensity threshold,
+averaged over 15 graphs) shows a smooth, monotonic collapse from ~4,900 mean
+reachable pairs at threshold 0.1 down to ~84 at threshold 0.9 -- see
+`logs/threshold_sweep.png`.
+
+```bash
+python -m src.evaluate                 # full run, writes logs/evaluation_report.json
+python -m src.evaluate --quick         # tiny sample sizes, fast smoke test
+```
+
+Outputs: `logs/evaluation_report.json`, `ablation_metrics.{csv,png}`,
+`path_quality.csv`, `multigraph_crosscheck.csv`, `threshold_sweep.{csv,png}`.
+
+### Honest limitations
+
+* Average Precision (0.32) is far from 1.0 -- with 0.17% positive edges this
+  is a hard ranking problem; ROC-AUC alone would have overstated how good the
+  model is.
+* The path-quality gain (0.64 vs 0.58 Jaccard) is real but modest; the GNN's
+  advantage is much sharper at the edge-ranking level (P@10 = 1.0) than at the
+  whole-path level.
+* Everything above is evaluated on one dataset/source. No cross-dataset or
+  live-environment generalisation test exists yet.
+* The classical algorithms are O(V^3) (Warshall, Floyd-Warshall); fine for the
+  361-node graphs here, would need a sparse-graph rework at real-world scale.
+
+### Interactive step-through animation
+
+`src/animation.html` (self-contained, open directly in a browser, or see the
+published Artifact) lets you step through all five algorithms on toy graphs,
+plus Dijkstra and Prim on the real 361-node graph. Rebuild it after changing
+a trace with:
+
+```bash
+python -m src.export_traces   # regenerates logs/animation_data.json
+                              # and rebuilds src/animation.html from
+                              # src/animation.template.html
+```
+
+### Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest tests/ -v
+```
+
+21 tests cover the five algorithms (including edge cases: ragged matrices,
+negative weights, disconnected graphs), the shape-based loader, and the
+model's forward/backward pass -- all synthetic, no dataset or GPU required, so
+they also run in CI (`.github/workflows/tests.yml`).
+
+---
+
+## 7. Setup & run
 
 **Environment** (already provisioned on this machine): Python 3.14,
 `torch 2.13.0+cu126`, `torch_geometric 2.8.0.post1`, CUDA 12.6, NVIDIA
@@ -179,12 +274,19 @@ python -m src.plot_training             # logs/training_curve.png
 python -m src.main
 python -m src.main --graph 5 --threshold 0.6      # pick a different test graph
 python -m src.main --train-if-missing --epochs 20 # train then run in one go
+
+# 7. does the GNN help? (ablation, multi-graph cross-check, threshold sweep)
+python -m src.evaluate
+
+# 8. tests
+pip install -r requirements-dev.txt && pytest tests/ -v
 ```
 
 ### Layout
 
 ```
-requirements.txt
+requirements.txt / requirements-dev.txt
+.github/workflows/tests.yml        # CI: pytest on every push (CPU-only)
 data/_data_/*.pt                   # extracted dataset (git-ignored)
 external/PhD_Replication_Package/  # cloned upstream (git-ignored)
 checkpoints/                       # ckpt_epoch_XXXX.pt, latest.pt (git-ignored)
@@ -192,7 +294,12 @@ logs/
   diagnostic_report.txt
   training_log.csv                 # per-epoch metrics -> report chart
   training_curve.png
-  explain/<run_id>.json + <run_id>__<algo>.csv
+  evaluation_report.json           # ablation + cross-check + sweep, all in one
+  ablation_metrics.{csv,png}
+  path_quality.csv
+  multigraph_crosscheck.csv
+  threshold_sweep.{csv,png}
+  explain/<run_id>.json + <run_id>__<algo>.csv  (git-ignored, regenerable)
 src/
   env_check.py                     # hard CUDA gate
   diagnostic.py                    # dataset schema discovery
@@ -204,6 +311,12 @@ src/
   main.py              (Part 3)    # end-to-end pipeline
   algorithms/          (Part 2)    # warshall / floyd_warshall / dijkstra / kruskal / prim
   explain/             (Part 4)    # trace -> JSON + CSV
+  export_traces.py                 # trace data -> animation.html
+  animation.html / animation.template.html   # interactive step-through player
+  evaluate.py                      # ablation, multi-graph cross-check, sweep
+tests/
+  test_algorithms.py               # the 5 algorithms, edge cases, DisjointSet
+  test_pipeline.py                 # shape-detection loader + model, synthetic data
 ```
 
 ### Citation

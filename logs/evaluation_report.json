@@ -1,0 +1,87 @@
+{
+  "test_split_size": 207,
+  "pooled_ranking_metrics": {
+    "gnn": {
+      "roc_auc": 0.9929107829804625,
+      "average_precision": 0.3154663145542145,
+      "precision_at_10": 1.0,
+      "precision_at_50": 0.699999988079071,
+      "num_edges": 596090,
+      "num_positive": 705
+    },
+    "heuristic": {
+      "roc_auc": 0.3330658361176036,
+      "average_precision": 0.0008232451509684324,
+      "precision_at_10": 0.0,
+      "precision_at_50": 0.0,
+      "num_edges": 596090,
+      "num_positive": 705
+    },
+    "uniform": {
+      "roc_auc": 0.5,
+      "average_precision": 0.0012457340490072966,
+      "precision_at_10": 0.0,
+      "precision_at_50": 0.0,
+      "num_edges": 596090,
+      "num_positive": 705
+    }
+  },
+  "path_quality_sample_size": 50,
+  "path_quality_mean_jaccard": {
+    "uniform": 0.5795411255411256,
+    "heuristic": 0.5635324675324676,
+    "gnn": 0.6378102453102453
+  },
+  "crosscheck_sample_size": 30,
+  "crosscheck_agreement_rate": {
+    "dijkstra_eq_floyd_warshall": 1.0,
+    "kruskal_eq_prim": 1.0
+  },
+  "threshold_sweep": [
+    {
+      "threshold": 0.1,
+      "mean_reachable_pairs": 4929.6,
+      "mean_reach_from_source": 113.86666666666666
+    },
+    {
+      "threshold": 0.2,
+      "mean_reachable_pairs": 3683.133333333333,
+      "mean_reach_from_source": 108.13333333333334
+    },
+    {
+      "threshold": 0.3,
+      "mean_reachable_pairs": 2509.2,
+      "mean_reach_from_source": 102.6
+    },
+    {
+      "threshold": 0.4,
+      "mean_reachable_pairs": 1297.1333333333334,
+      "mean_reach_from_source": 96.93333333333334
+    },
+    {
+      "threshold": 0.5,
+      "mean_reachable_pairs": 694.2666666666667,
+      "mean_reach_from_source": 88.0
+    },
+    {
+      "threshold": 0.6,
+      "mean_reachable_pairs": 449.0,
+      "mean_reach_from_source": 75.06666666666666
+    },
+    {
+      "threshold": 0.7,
+      "mean_reachable_pairs": 324.4,
+      "mean_reach_from_source": 66.93333333333334
+    },
+    {
+      "threshold": 0.8,
+      "mean_reachable_pairs": 231.93333333333334,
+      "mean_reach_from_source": 54.333333333333336
+    },
+    {
+      "threshold": 0.9,
+      "mean_reachable_pairs": 84.4,
+      "mean_reach_from_source": 29.8
+    }
+  ]
+}
