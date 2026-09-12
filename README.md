@@ -204,7 +204,11 @@ Outputs: `logs/evaluation_report.json`, `ablation_metrics.{csv,png}`,
   advantage is much sharper at the edge-ranking level (P@10 = 1.0) than at the
   whole-path level.
 * Everything above is evaluated on one dataset/source. No cross-dataset or
-  live-environment generalisation test exists yet.
+  live-environment generalisation test exists yet: the AD graphs are
+  synthetic topology from a published dataset (François et al., 2025), not a
+  live-collected BloodHound/SharpHound export from a real or lab AD domain.
+  A live-collection validation pass would need a real AD environment (e.g. a
+  GOAD lab) to gather data from, which was scoped out of this project.
 * The classical algorithms are O(V^3) (Warshall, Floyd-Warshall); fine for the
   361-node graphs here, would need a sparse-graph rework at real-world scale.
 
