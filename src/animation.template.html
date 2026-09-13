@@ -274,8 +274,12 @@ function drawGraph(svg, graph){
   const zoomG=svg.append("g").attr("class","zoom");
   const staticE=zoomG.append("g");
   const dynE=zoomG.append("g");
+  const dynL=zoomG.append("g");
   const nodeG=zoomG.append("g");
   const labG=zoomG.append("g");
+
+  const eW=new Map();
+  if(graph.edges[0] && graph.edges[0].length>2) graph.edges.forEach(e=>eW.set(e[0]+"_"+e[1],e[2]));
 
   function edgePath(u,v){
     const a=P[u], b=P[v];
@@ -321,7 +325,18 @@ function drawGraph(svg, graph){
       .merge(sel)
       .attr("class",d=>"edge "+d.cls)
       .attr("d",d=>edgePath(d.u,d.v)||edgePath(d.v,d.u))
-      .attr("marker-end",graph.directed && !big ? "url(#arw)" : null);
+      .attr("marker-end",graph.directed?"url(#arw)":null);
+
+    if(big){
+      const withW=list.filter(d=>eW.has(d.u+"_"+d.v)||eW.has(d.v+"_"+d.u));
+      const lsel=dynL.selectAll("text").data(withW,d=>d.u+"_"+d.v+"_"+d.cls);
+      lsel.exit().remove();
+      lsel.enter().append("text")
+        .merge(lsel)
+        .attr("class","elabel").attr("text-anchor","middle")
+        .attr("x",d=>(P[d.u][0]+P[d.v][0])/2).attr("y",d=>(P[d.u][1]+P[d.v][1])/2-3)
+        .text(d=>eW.get(d.u+"_"+d.v) ?? eW.get(d.v+"_"+d.u));
+    }
   }
   function paintNodes(clsOf){
     nodes.attr("class",(d,i)=>"node "+(clsOf(i,d)||""))
